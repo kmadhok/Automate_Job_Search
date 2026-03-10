@@ -10,6 +10,10 @@ from typing import Dict, List, Optional
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.extraction_strategy import LLMExtractionStrategy
+try:
+    from crawl4ai.types import LLMConfig
+except Exception:
+    LLMConfig = None
 from pydantic import BaseModel, Field
 
 from config import OPENAI_API_KEY, OPENAI_MODEL, SCRAPE_DELAY, SCRAPE_TIMEOUT
@@ -185,6 +189,28 @@ def _merge_job_data(primary: Dict, secondary: Dict) -> Dict:
     return merged
 
 
+def _build_extraction_strategy() -> LLMExtractionStrategy:
+    kwargs = {
+        "schema": JobPosting.model_json_schema(),
+        "extraction_type": "schema",
+        "instruction": (
+            "Extract job posting information from this page. "
+            "Focus on core listing content. Ignore site navigation and unrelated sections."
+        ),
+    }
+
+    if LLMConfig is not None:
+        kwargs["llm_config"] = LLMConfig(
+            provider=f"openai/{OPENAI_MODEL}",
+            api_token=OPENAI_API_KEY,
+        )
+    else:
+        kwargs["provider"] = f"openai/{OPENAI_MODEL}"
+        kwargs["api_token"] = OPENAI_API_KEY
+
+    return LLMExtractionStrategy(**kwargs)
+
+
 async def scrape_job_page(url: str, crawler: AsyncWebCrawler) -> Dict:
     """
     Scrape a single job posting using deterministic extraction with LLM enrichment.
@@ -192,16 +218,7 @@ async def scrape_job_page(url: str, crawler: AsyncWebCrawler) -> Dict:
     try:
         print(f"  Scraping: {url}")
 
-        extraction_strategy = LLMExtractionStrategy(
-            provider=f"openai/{OPENAI_MODEL}",
-            api_token=OPENAI_API_KEY,
-            schema=JobPosting.model_json_schema(),
-            extraction_type="schema",
-            instruction=(
-                "Extract job posting information from this page. "
-                "Focus on core listing content. Ignore site navigation and unrelated sections."
-            ),
-        )
+        extraction_strategy = _build_extraction_strategy()
 
         result = await crawler.arun(
             url=url,
