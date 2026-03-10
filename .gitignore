@@ -1,0 +1,60 @@
+# Environment variables
+.env
+credentials.json
+# Gmail credentials and tokens
+credentials.json
+credentials_second.json
+token.json
+token.pickle
+token.json.bak_*
+token_sheets.pickle
+token_sheets.pickle.bak_*
+
+# Output files
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+.venv311
+
+# IDE
+.vscode/
+.idea/
+.claude/settings.local.json
+*.swp
+*.swo
+.DS_Store
+
+# Local nested repo
+Automate_Job_Search/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Logs
+*.log

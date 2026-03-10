@@ -1,0 +1,9 @@
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.114.0
+crawl4ai==0.3.74
+openai==1.58.1
+pandas==2.2.0
+python-dotenv==1.0.0
+pyarrow==18.1.0
+pypdf==5.4.0
