@@ -11,9 +11,9 @@ from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.extraction_strategy import LLMExtractionStrategy
 try:
-    from crawl4ai.types import LLMConfig
+    from crawl4ai.types import create_llm_config
 except Exception:
-    LLMConfig = None
+    create_llm_config = None
 from pydantic import BaseModel, Field
 
 from config import OPENAI_API_KEY, OPENAI_MODEL, SCRAPE_DELAY, SCRAPE_TIMEOUT
@@ -199,8 +199,8 @@ def _build_extraction_strategy() -> LLMExtractionStrategy:
         ),
     }
 
-    if LLMConfig is not None:
-        kwargs["llm_config"] = LLMConfig(
+    if create_llm_config is not None:
+        kwargs["llm_config"] = create_llm_config(
             provider=f"openai/{OPENAI_MODEL}",
             api_token=OPENAI_API_KEY,
         )
