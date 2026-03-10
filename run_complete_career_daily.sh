@@ -4,8 +4,43 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-VENV_PATH="${VENV_PATH:-$SCRIPT_DIR/.venv311}"
-PYTHON_BIN="${PYTHON_BIN:-$VENV_PATH/bin/python}"
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+
+resolve_python_bin() {
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    printf '%s\n' "$PYTHON_BIN"
+    return 0
+  fi
+
+  if [[ -n "${VENV_PATH:-}" && -x "${VENV_PATH}/bin/python" ]]; then
+    printf '%s\n' "${VENV_PATH}/bin/python"
+    return 0
+  fi
+
+  if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
+    printf '%s\n' "${VIRTUAL_ENV}/bin/python"
+    return 0
+  fi
+
+  if [[ -x "$SCRIPT_DIR/.venv/bin/python" ]]; then
+    printf '%s\n' "$SCRIPT_DIR/.venv/bin/python"
+    return 0
+  fi
+
+  if [[ -x "$SCRIPT_DIR/.venv311/bin/python" ]]; then
+    printf '%s\n' "$SCRIPT_DIR/.venv311/bin/python"
+    return 0
+  fi
+
+  command -v python3 || true
+}
+
+PYTHON_BIN="$(resolve_python_bin)"
 LOCK_DIR="${LOCK_DIR:-$SCRIPT_DIR/.run_lock_complete}"
 LOCK_TTL_SECONDS="${LOCK_TTL_SECONDS:-43200}"
 LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/output/logs}"
@@ -21,16 +56,9 @@ fi
 
 mkdir -p "$LOG_DIR" "$SCRIPT_DIR/output"
 
-if [[ ! -x "$PYTHON_BIN" ]]; then
-  echo "ERROR: Python executable not found at $PYTHON_BIN"
+if [[ -z "$PYTHON_BIN" || ! -x "$PYTHON_BIN" ]]; then
+  echo "ERROR: Python executable not found. Set PYTHON_BIN or VENV_PATH in .env."
   exit 2
-fi
-
-if [[ -f "$SCRIPT_DIR/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$SCRIPT_DIR/.env"
-  set +a
 fi
 
 export GMAIL_INTERACTIVE_AUTH="${GMAIL_INTERACTIVE_AUTH:-0}"

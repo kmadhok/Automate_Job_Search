@@ -123,15 +123,19 @@ def main() -> int:
         email_content = extract_email_content(email)
         message_id = email_content["message_id"]
 
-        if message_id in processed_message_ids:
-            continue
-
         matched_tags = match_job_tags(email_content, JOB_TAGS)
         if JOB_TAGS and not matched_tags:
             newly_processed_messages.add(message_id)
             continue
 
         linkedin_links = extract_linkedin_job_links(email_content)
+        dedupe_keys = {
+            link["job_id"] or link["canonical_url"] for link in linkedin_links
+        }
+        message_was_seen = message_id in processed_message_ids
+        if message_was_seen and dedupe_keys.issubset(processed_job_keys):
+            continue
+
         print(
             f"  Email {i + 1}/{len(emails)}: "
             f"{email_content['subject'][:70]} ({len(linkedin_links)} links)"
@@ -210,6 +214,7 @@ def main() -> int:
         canonical_url = info["canonical_url"]
         job_data = jobs_by_url.get(canonical_url, {"url": canonical_url, "error": "No result returned"})
         merged = job_data.copy()
+        merged["dedupe_key"] = dedupe_key
         merged["job_id"] = merged.get("job_id") or info.get("job_id")
         merged["source_email_ids"] = sorted({r["message_id"] for r in info["source_records"]})
         merged["source_tags"] = sorted(
@@ -225,7 +230,13 @@ def main() -> int:
     print(f"✗ Failed to scrape: {len(failed_jobs)}")
 
     processed_message_ids.update(newly_processed_messages)
-    processed_job_keys.update(selected_dedupe_sources.keys())
+    processed_job_keys.update(
+        {
+            job["dedupe_key"]
+            for job in successful_jobs
+            if job.get("dedupe_key")
+        }
+    )
     save_seen_ids(PROCESSED_MESSAGE_IDS_FILE, processed_message_ids)
     save_seen_ids(PROCESSED_JOB_IDS_FILE, processed_job_keys)
 
