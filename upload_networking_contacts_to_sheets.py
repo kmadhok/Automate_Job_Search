@@ -16,6 +16,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+MAX_CELL_CHARS = 49000
+TRUNCATION_SUFFIX = "... [truncated]"
 
 DEFAULT_COLUMNS = [
     "imported_at_utc",
@@ -84,8 +86,12 @@ def as_text(value: Any) -> str:
     if isinstance(value, list):
         return "; ".join(as_text(item) for item in value)
     if isinstance(value, dict):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value)
+        text = json.dumps(value, ensure_ascii=False)
+    else:
+        text = str(value)
+    if len(text) > MAX_CELL_CHARS:
+        return text[: MAX_CELL_CHARS - len(TRUNCATION_SUFFIX)] + TRUNCATION_SUFFIX
+    return text
 
 
 def load_payload(path: Path) -> Dict[str, Any]:
