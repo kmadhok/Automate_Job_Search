@@ -65,5 +65,43 @@ SCRAPE_DELAY = 2  # Seconds between scraping requests
 SAVE_JSON = True
 SAVE_CSV = True
 
+# Email discovery settings (Hunter.io)
+HUNTER_IO_API_KEY = os.getenv("HUNTER_IO_API_KEY", "")
+
+# Gmail draft settings
+GMAIL_DRAFT_ENABLED = env_bool("GMAIL_DRAFT_ENABLED", True)
+
+# Default job URLs file
+JOB_URLS_FILE = env_path("JOB_URLS_FILE", BASE_DIR / "job_urls.txt")
+
+# Workspace paths (Job Search workspace for human-facing output)
+WORKSPACE_DIR = env_path(
+    "WORKSPACE_DIR",
+    Path("/Users/kanumadhok/Documents/Claude/Projects/Job Search"),
+)
+WORKSPACE_DAILY_DIR = env_path(
+    "WORKSPACE_DAILY_DIR",
+    WORKSPACE_DIR / "daily_searches",
+)
+CAREER_PREFERENCES_PATH = env_path(
+    "CAREER_PREFERENCES_PATH",
+    WORKSPACE_DIR / "career_preferences.md",
+)
+MASTER_EXPERIENCE_PATH = env_path(
+    "MASTER_EXPERIENCE_PATH",
+    WORKSPACE_DIR / "kanu_madhok_master_experience.md",
+)
+
+# Fit evaluation settings (Phase 1)
+FIT_MIN_SCORE_FOR_OUTREACH = int(os.getenv("FIT_MIN_SCORE_FOR_OUTREACH", "70"))
+FIT_MIN_SCORE_FOR_RESUME = int(os.getenv("FIT_MIN_SCORE_FOR_RESUME", "40"))
+FIT_USE_LLM_FOR_YELLOW = env_bool("FIT_USE_LLM_FOR_YELLOW", True)
+
+# Resume tailoring settings (Phase 3)
+INCLUDE_ADVANCED_AI_BULLETS = env_bool("INCLUDE_ADVANCED_AI_BULLETS", True)
+
+# Safety rails
+MAX_DRAFTS_PER_RUN = int(os.getenv("MAX_DRAFTS_PER_RUN", "10"))
+
 # Create output directory if it doesn't exist
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

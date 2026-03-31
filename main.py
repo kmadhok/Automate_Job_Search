@@ -30,6 +30,7 @@ from email_processor import (
 )
 from gmail_auth import get_gmail_service, get_label_id
 from job_scraper import scrape_jobs_sync
+from job_manager import JobManager
 
 
 def load_seen_ids(path: Path) -> Set[str]:
@@ -228,6 +229,38 @@ def main() -> int:
 
     print(f"\n✓ Successfully scraped: {len(successful_jobs)}")
     print(f"✗ Failed to scrape: {len(failed_jobs)}")
+
+    # Register successful jobs in the unified workspace registry
+    print("\n[6.5/6] Registering jobs in workspace registry...")
+    try:
+        mgr = JobManager()
+        workspace_registered = 0
+        workspace_skipped = 0
+        for job in successful_jobs:
+            company = job.get("company", "")
+            title = job.get("title", "")
+            url = job.get("url", "")
+            if not company or not title:
+                continue
+            if mgr.is_seen(company, title) or (url and mgr.is_seen_by_url(url)):
+                workspace_skipped += 1
+                continue
+            try:
+                fit_data = None
+                if job.get("fit_score") is not None:
+                    fit_data = {
+                        "fit_score": job.get("fit_score", 0),
+                        "fit_tier": job.get("fit_tier", "unscored"),
+                        "fit_summary": job.get("fit_summary", ""),
+                        "keywords_for_resume": job.get("keywords_for_resume", []),
+                    }
+                mgr.register_from_scraped(job, fit_data=fit_data)
+                workspace_registered += 1
+            except Exception as e:
+                print(f"  Warning: Could not register {company} — {title}: {e}")
+        print(f"  Workspace: {workspace_registered} registered, {workspace_skipped} skipped")
+    except Exception as e:
+        print(f"  Warning: Workspace registration failed: {e}")
 
     processed_message_ids.update(newly_processed_messages)
     processed_job_keys.update(

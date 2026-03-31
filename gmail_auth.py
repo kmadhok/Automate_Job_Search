@@ -1,7 +1,10 @@
 """Gmail API authentication and service creation."""
 
+import base64
 import os.path
 import pickle
+from email.mime.text import MIMEText
+
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -9,8 +12,11 @@ from googleapiclient.discovery import build
 
 from config import CREDENTIALS_FILE, GMAIL_INTERACTIVE_AUTH, TOKEN_FILE
 
-# Gmail API scopes - we only need read access
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+# Gmail API scopes - read access + compose for creating drafts
+SCOPES = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.compose',
+]
 
 
 def get_gmail_service():
@@ -90,4 +96,36 @@ def get_label_id(service, label_name):
         return None
     except Exception as e:
         print(f"Error getting label ID: {e}")
+        return None
+
+
+def create_gmail_draft(service, to_email, subject, body):
+    """
+    Create a Gmail draft message.
+
+    Args:
+        service: Authenticated Gmail service (must have gmail.compose scope).
+        to_email: Recipient email address.
+        subject: Email subject line.
+        body: Plain-text email body.
+
+    Returns:
+        dict: Gmail API draft resource with 'id' and 'message' keys,
+              or None on failure.
+    """
+    try:
+        message = MIMEText(body)
+        message['to'] = to_email
+        message['subject'] = subject
+
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+        draft_body = {'message': {'raw': raw}}
+
+        draft = service.users().drafts().create(
+            userId='me', body=draft_body
+        ).execute()
+
+        return draft
+    except Exception as e:
+        print(f"Error creating draft for {to_email}: {e}")
         return None

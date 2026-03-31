@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload generated outreach messages to Google Sheets."""
+"""Upload a pipeline run summary row to Google Sheets."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import json
 import pickle
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, List
 from urllib.parse import urlparse
 
 from google.auth.transport.requests import Request
@@ -16,47 +16,36 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-MAX_CELL_CHARS = 49000
-TRUNCATION_SUFFIX = "... [truncated]"
 
 DEFAULT_COLUMNS = [
-    "imported_at_utc",
-    "source_file",
-    "job_id",
-    "job_title",
-    "company",
-    "location",
-    "team_guess",
-    "team_confidence",
-    "team_source",
-    "role_type",
-    "rank",
-    "name",
-    "headline",
-    "linkedin_url",
-    "score",
-    "query",
-    "subject",
-    "message_body",
-    "connection_note",
-    "proof_point_used",
-    "company_hook",
+    "run_timestamp",
+    "source",
+    "jobs_discovered",
+    "jobs_green",
+    "jobs_yellow",
+    "jobs_red",
+    "contacts_found",
+    "drafts_created",
+    "errors",
 ]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Upload outreach message JSON to a Google Sheet tab."
+        description="Upload a pipeline run summary row to Google Sheets."
     )
-    parser.add_argument("--json", required=True, help="Path to outreach_messages JSON file")
+    parser.add_argument("--json", default="", help="Path to run summary JSON (optional)")
     parser.add_argument("--sheet", required=True, help="Google Sheet URL or spreadsheet ID")
-    parser.add_argument("--tab", default="job_messages", help="Target sheet tab name")
-    parser.add_argument(
-        "--mode",
-        default="replace",
-        choices=["append", "replace"],
-        help="Append rows or replace all tab contents",
-    )
+    parser.add_argument("--tab", default="pipeline_runs", help="Target sheet tab name")
+    # Run metadata (used if --json is not provided)
+    parser.add_argument("--source", default="", help="Run source (gmail/daily_report/manual)")
+    parser.add_argument("--jobs-discovered", type=int, default=0)
+    parser.add_argument("--jobs-green", type=int, default=0)
+    parser.add_argument("--jobs-yellow", type=int, default=0)
+    parser.add_argument("--jobs-red", type=int, default=0)
+    parser.add_argument("--contacts-found", type=int, default=0)
+    parser.add_argument("--drafts-created", type=int, default=0)
+    parser.add_argument("--errors", default="")
     parser.add_argument(
         "--credentials-file",
         default="credentials.json",
@@ -81,7 +70,7 @@ def extract_sheet_id(sheet: str) -> str:
         marker = "/spreadsheets/d/"
         start = path.find(marker)
         if start >= 0:
-            remainder = path[start + len(marker) :]
+            remainder = path[start + len(marker):]
             return remainder.split("/", 1)[0]
     return sheet
 
@@ -90,41 +79,8 @@ def as_text(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, list):
-        return "; ".join(as_text(item) for item in value)
-    if isinstance(value, dict):
-        text = json.dumps(value, ensure_ascii=False)
-    else:
-        text = str(value)
-    if len(text) > MAX_CELL_CHARS:
-        return text[: MAX_CELL_CHARS - len(TRUNCATION_SUFFIX)] + TRUNCATION_SUFFIX
-    return text
-
-
-def load_payload(path: Path) -> Dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-    if not isinstance(payload, dict):
-        raise ValueError("Expected top-level JSON object")
-    return payload
-
-
-def build_records(payload: Dict[str, Any], source_file: str) -> List[Dict[str, str]]:
-    messages = payload.get("messages", [])
-    if not isinstance(messages, list):
-        raise ValueError("Expected 'messages' to be a list")
-
-    imported = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    rows: List[Dict[str, str]] = []
-    for item in messages:
-        if not isinstance(item, dict):
-            continue
-        row = {"imported_at_utc": imported, "source_file": source_file}
-        for key in DEFAULT_COLUMNS:
-            if key in ("imported_at_utc", "source_file"):
-                continue
-            row[key] = as_text(item.get(key))
-        rows.append(row)
-    return rows
+        return "; ".join(str(item) for item in value)
+    return str(value)
 
 
 def get_credentials(
@@ -175,60 +131,89 @@ def ensure_tab_exists(service, spreadsheet_id: str, tab_name: str) -> None:
     service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
 
 
-def chunked(rows: List[List[str]], size: int) -> Iterable[List[List[str]]]:
-    for i in range(0, len(rows), size):
-        yield rows[i : i + size]
+def get_header(service, spreadsheet_id: str, tab_name: str) -> List[str]:
+    resp = (
+        service.spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range=f"{tab_name}!1:1")
+        .execute()
+    )
+    values = resp.get("values", [])
+    if not values:
+        return []
+    return [as_text(v).strip() for v in values[0] if as_text(v).strip()]
 
 
-def append_rows(service, spreadsheet_id: str, tab_name: str, rows: List[List[str]]) -> int:
-    total = 0
-    for block in chunked(rows, 500):
-        if not block:
-            continue
+def ensure_header(
+    service, spreadsheet_id: str, tab_name: str, required_columns: List[str]
+) -> List[str]:
+    existing = get_header(service, spreadsheet_id, tab_name)
+    if not existing:
         service.spreadsheets().values().append(
             spreadsheetId=spreadsheet_id,
             range=f"{tab_name}!A1",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
-            body={"values": block},
+            body={"values": [required_columns]},
         ).execute()
-        total += len(block)
-    return total
+        return required_columns
 
+    missing = [col for col in required_columns if col not in existing]
+    if not missing:
+        return existing
 
-def write_rows(service, spreadsheet_id: str, tab_name: str, rows: List[List[str]]) -> int:
+    merged = existing + missing
     service.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id,
+        range=f"{tab_name}!1:1",
+        valueInputOption="USER_ENTERED",
+        body={"values": [merged]},
+    ).execute()
+    return merged
+
+
+def append_row(service, spreadsheet_id: str, tab_name: str, row: List[str]) -> None:
+    service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
         range=f"{tab_name}!A1",
         valueInputOption="USER_ENTERED",
-        body={"values": rows},
+        insertDataOption="INSERT_ROWS",
+        body={"values": [row]},
     ).execute()
-    return len(rows)
-
-
-def clear_tab(service, spreadsheet_id: str, tab_name: str) -> None:
-    service.spreadsheets().values().clear(
-        spreadsheetId=spreadsheet_id, range=f"{tab_name}!A:ZZ", body={}
-    ).execute()
-
-
-def materialize(records: List[Dict[str, str]], columns: List[str]) -> List[List[str]]:
-    return [[record.get(col, "") for col in columns] for record in records]
 
 
 def main() -> int:
     args = parse_args()
-    json_path = Path(args.json)
-    if not json_path.exists():
-        raise FileNotFoundError(f"JSON file not found: {json_path}")
-
-    payload = load_payload(json_path)
-    records = build_records(payload, source_file=json_path.name)
-    if not records:
-        print("No messages in JSON. Nothing to upload.")
-        return 0
-
     sheet_id = extract_sheet_id(args.sheet)
+
+    # Build run record from JSON or CLI args
+    if args.json and Path(args.json).exists():
+        with open(args.json, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        record = {
+            "run_timestamp": data.get("run_timestamp", datetime.now(timezone.utc).replace(microsecond=0).isoformat()),
+            "source": data.get("source", ""),
+            "jobs_discovered": data.get("jobs_discovered", 0),
+            "jobs_green": data.get("jobs_green", 0),
+            "jobs_yellow": data.get("jobs_yellow", 0),
+            "jobs_red": data.get("jobs_red", 0),
+            "contacts_found": data.get("contacts_found", 0),
+            "drafts_created": data.get("drafts_created", 0),
+            "errors": data.get("errors", ""),
+        }
+    else:
+        record = {
+            "run_timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "source": args.source,
+            "jobs_discovered": args.jobs_discovered,
+            "jobs_green": args.jobs_green,
+            "jobs_yellow": args.jobs_yellow,
+            "jobs_red": args.jobs_red,
+            "contacts_found": args.contacts_found,
+            "drafts_created": args.drafts_created,
+            "errors": args.errors,
+        }
+
     creds = get_credentials(
         credentials_file=Path(args.credentials_file),
         token_file=Path(args.token_file),
@@ -237,14 +222,11 @@ def main() -> int:
     service = build("sheets", "v4", credentials=creds)
     ensure_tab_exists(service, sheet_id, args.tab)
 
-    rows = materialize(records, DEFAULT_COLUMNS)
-    if args.mode == "replace":
-        clear_tab(service, sheet_id, args.tab)
-        uploaded = write_rows(service, sheet_id, args.tab, [DEFAULT_COLUMNS] + rows) - 1
-    else:
-        uploaded = append_rows(service, sheet_id, args.tab, rows)
+    columns = ensure_header(service, sheet_id, args.tab, DEFAULT_COLUMNS)
+    row = [as_text(record.get(col, "")) for col in columns]
+    append_row(service, sheet_id, args.tab, row)
 
-    print(f"Uploaded {uploaded} message rows to '{args.tab}' in spreadsheet {sheet_id}.")
+    print(f"Logged pipeline run to '{args.tab}' in spreadsheet {sheet_id}.")
     return 0
 
 

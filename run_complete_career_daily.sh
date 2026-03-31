@@ -133,6 +133,7 @@ cmd=(
   --resume-tab "$COMPLETE_PIPELINE_RESUME_TAB"
   --networking-contacts-tab "$COMPLETE_PIPELINE_NETWORKING_CONTACTS_TAB"
   --networking-messages-tab "$COMPLETE_PIPELINE_NETWORKING_MESSAGES_TAB"
+  --auto-discover-reports
 )
 
 if [[ "$COMPLETE_PIPELINE_NON_INTERACTIVE_SHEETS" == "1" ]]; then

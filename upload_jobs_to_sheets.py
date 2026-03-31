@@ -32,6 +32,19 @@ DEFAULT_COLUMNS = [
     "employment_type",
     "salary_range",
     "url",
+    # Fit evaluation columns (Phase 6)
+    "fit_score",
+    "fit_tier",
+    "company_tier",
+    "green_flags",
+    "yellow_flags",
+    "red_flags",
+    "fit_summary",
+    "recommended_action",
+    "keywords_for_resume",
+    "source",
+    "resume_pdf",
+    # Original columns
     "description",
     "requirements",
     "responsibilities",
@@ -159,6 +172,17 @@ def build_rows(payload: Dict[str, Any], source_file: str) -> List[Dict[str, str]
     for job in jobs:
         if not isinstance(job, dict):
             continue
+        # Extract fit signal lists from nested dict or top-level
+        fit_signals = job.get("fit_signals", {})
+        if isinstance(fit_signals, dict):
+            green_flags = fit_signals.get("green_flags")
+            yellow_flags = fit_signals.get("yellow_flags")
+            red_flags = fit_signals.get("red_flags")
+        else:
+            green_flags = job.get("green_flags")
+            yellow_flags = job.get("yellow_flags")
+            red_flags = job.get("red_flags")
+
         record = {
             "imported_at_utc": imported_at,
             "source_file": source_file,
@@ -171,6 +195,19 @@ def build_rows(payload: Dict[str, Any], source_file: str) -> List[Dict[str, str]
             "employment_type": job.get("employment_type"),
             "salary_range": job.get("salary_range"),
             "url": job.get("url"),
+            # Fit evaluation fields
+            "fit_score": job.get("fit_score"),
+            "fit_tier": job.get("fit_tier"),
+            "company_tier": job.get("company_tier"),
+            "green_flags": green_flags,
+            "yellow_flags": yellow_flags,
+            "red_flags": red_flags,
+            "fit_summary": job.get("fit_summary"),
+            "recommended_action": job.get("recommended_action"),
+            "keywords_for_resume": job.get("keywords_for_resume"),
+            "source": job.get("source"),
+            "resume_pdf": job.get("resume_pdf"),
+            # Original fields
             "description": job.get("description"),
             "requirements": job.get("requirements"),
             "responsibilities": job.get("responsibilities"),

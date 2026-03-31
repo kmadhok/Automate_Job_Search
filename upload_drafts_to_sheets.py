@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload generated outreach messages to Google Sheets."""
+"""Upload Gmail draft tracking data to Google Sheets."""
 
 from __future__ import annotations
 
@@ -22,38 +22,32 @@ TRUNCATION_SUFFIX = "... [truncated]"
 DEFAULT_COLUMNS = [
     "imported_at_utc",
     "source_file",
+    "created_at_utc",
     "job_id",
     "job_title",
     "company",
-    "location",
-    "team_guess",
-    "team_confidence",
-    "team_source",
+    "contact_name",
+    "contact_email",
     "role_type",
-    "rank",
-    "name",
-    "headline",
-    "linkedin_url",
-    "score",
-    "query",
+    "email_source",
+    "email_confidence",
     "subject",
-    "message_body",
-    "connection_note",
-    "proof_point_used",
-    "company_hook",
+    "draft_id",
+    "status",
+    "error_message",
 ]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Upload outreach message JSON to a Google Sheet tab."
+        description="Upload Gmail draft tracking JSON to a Google Sheet tab."
     )
-    parser.add_argument("--json", required=True, help="Path to outreach_messages JSON file")
+    parser.add_argument("--json", required=True, help="Path to drafts JSON file")
     parser.add_argument("--sheet", required=True, help="Google Sheet URL or spreadsheet ID")
-    parser.add_argument("--tab", default="job_messages", help="Target sheet tab name")
+    parser.add_argument("--tab", default="gmail_drafts", help="Target sheet tab name")
     parser.add_argument(
         "--mode",
-        default="replace",
+        default="append",
         choices=["append", "replace"],
         help="Append rows or replace all tab contents",
     )
@@ -109,13 +103,13 @@ def load_payload(path: Path) -> Dict[str, Any]:
 
 
 def build_records(payload: Dict[str, Any], source_file: str) -> List[Dict[str, str]]:
-    messages = payload.get("messages", [])
-    if not isinstance(messages, list):
-        raise ValueError("Expected 'messages' to be a list")
+    drafts = payload.get("drafts", [])
+    if not isinstance(drafts, list):
+        raise ValueError("Expected 'drafts' to be a list")
 
     imported = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     rows: List[Dict[str, str]] = []
-    for item in messages:
+    for item in drafts:
         if not isinstance(item, dict):
             continue
         row = {"imported_at_utc": imported, "source_file": source_file}
@@ -225,7 +219,7 @@ def main() -> int:
     payload = load_payload(json_path)
     records = build_records(payload, source_file=json_path.name)
     if not records:
-        print("No messages in JSON. Nothing to upload.")
+        print("No draft records in JSON. Nothing to upload.")
         return 0
 
     sheet_id = extract_sheet_id(args.sheet)
@@ -244,7 +238,7 @@ def main() -> int:
     else:
         uploaded = append_rows(service, sheet_id, args.tab, rows)
 
-    print(f"Uploaded {uploaded} message rows to '{args.tab}' in spreadsheet {sheet_id}.")
+    print(f"Uploaded {uploaded} draft rows to '{args.tab}' in spreadsheet {sheet_id}.")
     return 0
 
 
